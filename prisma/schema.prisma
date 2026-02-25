@@ -10,7 +10,7 @@ datasource db {
 model Client {
   id Int @id @default(autoincrement())
   name String
-  number String?
+  number String @unique
   score Float
   messages Message[]
   createdAt DateTime  @default(now())
@@ -21,6 +21,7 @@ model Message {
   id Int @id @default(autoincrement())
   text String
   origin String
+  number String 
   clientId Int
   createdAt DateTime @default(now())
   client Client @relation(fields: [clientId], references: [id])

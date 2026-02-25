@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Query, Res, HttpStatus } from '@nestjs/common';
 import { WebhookService } from './webhook.service';
 import type { Response } from 'express';
+import { messageWhatsAppDto } from './dto/messageWhatsApp.dto';
+import { SaveClientMessagesDto } from './dto/saveClientMessages.dto';
 
 @Controller('webhook')
 export class WebhookController {
@@ -23,9 +25,18 @@ export class WebhookController {
   }
 
   @Post()
-  receiveMessage(@Body() body: any, @Res() res: Response) {
+  receiveMessage(@Body() body: messageWhatsAppDto, @Res() res: Response) {
 
-    console.log('Mensaje recibido de WhatsApp:', JSON.stringify(body, null, 2));
+    if (body.entry?.[0]?.changes?.[0]?.value?.messages) {
+      const data: SaveClientMessagesDto = {
+        name: body.entry[0].changes[0].value.contacts[0].profile.name,
+        number: body.entry[0].changes[0].value.messages[0].from,
+        messages: body.entry[0].changes[0].value.messages[0].text.body
+      };
+      this.webhookService.saveClientMessage(data).catch((error) => {
+        console.error('Error guardando el mensaje en la BD:', error);
+      });;
+    }
 
     res.status(HttpStatus.OK).send('EVENT_RECEIVED');
 

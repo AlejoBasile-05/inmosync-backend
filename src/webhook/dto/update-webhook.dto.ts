@@ -1,4 +1,4 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { CreateWebhookDto } from './create-webhook.dto';
+import { SaveClientMessagesDto } from './saveClientMessages.dto';
 
-export class UpdateWebhookDto extends PartialType(CreateWebhookDto) {}
+export class UpdateWebhookDto extends PartialType(SaveClientMessagesDto) {}
