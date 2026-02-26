@@ -5,10 +5,12 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { Send } from 'express';
 import { SendClientMessageDto } from './dto/sendClientMessage.dto';
+import { LeadStatus } from '@prisma/client';
 
 interface IAResponse {
   score: number;
   message: string;
+  status: LeadStatus;
 }
 
 @Injectable()
@@ -51,7 +53,7 @@ export class WebhookService {
       const score = response.score || 0;
       this.prisma.client.update({
         where: { id: cliente.id },
-        data: { score: score, messages: {
+        data: { score: score, status: response.status, messages: {
           create: { text: response.message, origin: 'FastAPI', number: cliente.number }
         } }
       }).catch((error) => {
@@ -64,6 +66,14 @@ export class WebhookService {
       this.sendMessageToClient(messageCliente).catch((error) => {
         console.error('Error enviando el mensaje de respuesta al cliente:', error);
       });
+      if (response.status === LeadStatus.HOT) {
+        const messageToAgent: SendClientMessageDto = {
+          number: process.env.AGENT_PHONE_NUMBER || "542625635902",
+          message: `🔥 ¡LEAD CALIENTE! El cliente ${clienteFormateado.name} (${clienteFormateado.number}) tiene un score de ${response.score}`
+
+        }
+        this.sendMessageToClient(messageToAgent)
+      }
     }).catch((error) => {
       console.error('Error enviando el mensaje a la IA:', error);
     });

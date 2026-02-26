@@ -7,11 +7,19 @@ datasource db {
   provider  = "postgresql"
 }
 
+enum LeadStatus {
+  HOT
+  WARM
+  COOL
+  COLD
+}
+
 model Client {
   id Int @id @default(autoincrement())
   name String
   number String @unique
   score Float
+  status LeadStatus @default(COLD)
   messages Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
