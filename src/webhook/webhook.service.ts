@@ -33,6 +33,7 @@ export class WebhookService {
 
   async saveClientMessage(data: SaveClientMessagesDto) {
     const { name, number, messages, businessNumber } = data;
+    const numberFormatted = this.numberFormatting(number);
 
     const company = await this.prisma.company.findFirst({
       where: { 
@@ -57,16 +58,16 @@ export class WebhookService {
     }
 
     const cliente = await this.prisma.client.upsert({
-      where: { number: this.numberFormatting(number) },
+      where: { number: numberFormatted },
       update: { messages: {
-        create: { text: messages, origin: 'whatsapp', number: number}
+        create: { text: messages, origin: 'whatsapp', number: numberFormatted}
       } },
       create: { name: name,
-                number: this.numberFormatting(number),
+                number: numberFormatted,
                 score: 0,
                 agent: { connect: { id: nextAgent.id } },
                 messages: {
-                  create: { text: messages, origin: 'whatsapp', number: this.numberFormatting(number) }
+                  create: { text: messages, origin: 'whatsapp', number: numberFormatted }
       } },
     });
 
@@ -89,51 +90,52 @@ export class WebhookService {
 
     const clienteFormateado: SaveClientMessagesDto = {
       name: cliente.name,
-      number: cliente.number,
+      number: numberFormatted,
       score: cliente.score,
       messages: messages,
       businessNumber: businessNumber
     };
+    if (cliente.botActive === true) {
+      this.sendToAI(clienteFormateado).then(async (response) => {
+        const score = response.score || 0;
+        await this.prisma.client.update({
+          where: { id: cliente.id },
+          data: { score: score, status: response.status, messages: {
+            create: { text: response.message, origin: 'FastAPI', number: clienteFormateado.number }
+          } }
+        }).catch((error) => {
+          console.error('Error actualizando el score en la BD:', error);
+        });
 
-    this.sendToAI(clienteFormateado).then(async (response) => {
-      const score = response.score || 0;
-      await this.prisma.client.update({
-        where: { id: cliente.id },
-        data: { score: score, status: response.status, messages: {
-          create: { text: response.message, origin: 'FastAPI', number: cliente.number }
-        } }
-      }).catch((error) => {
-        console.error('Error actualizando el score en la BD:', error);
-      });
+        const incomingMessagePayload: MessageGatewayDto = {
+          id: `msg-${Date.now()}`,
+          clientId: cliente.id.toString(),
+          text: response.message,
+          origin: 'agent',
+          time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        };
 
-      const incomingMessagePayload: MessageGatewayDto = {
-        id: `msg-${Date.now()}`,
-        clientId: cliente.id.toString(),
-        text: response.message,
-        origin: 'agent',
-        time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
-      };
+        this.webhookGateway.emitNewMessage(cliente.id.toString(), incomingMessagePayload);
 
-      this.webhookGateway.emitNewMessage(cliente.id.toString(), incomingMessagePayload);
+        const messageCliente: SendClientMessageDto = {
+          number: numberFormatted,
+          message: response.message,
+        };
+        this.sendMessageToClient(messageCliente).catch((error) => {
+          console.error('Error enviando el mensaje de respuesta al cliente:', error);
+        });
+        if (response.status === LeadStatus.HOT) {
+          const messageToAgent: SendClientMessageDto = {
+            number: this.numberFormatting(nextAgent.number),
+            message: `🔥 ¡LEAD CALIENTE! El cliente ${clienteFormateado.name} (${clienteFormateado.number}) tiene un score de ${response.score}`
 
-      const messageCliente: SendClientMessageDto = {
-        number: this.numberFormatting(cliente.number),
-        message: response.message,
-      };
-      this.sendMessageToClient(messageCliente).catch((error) => {
-        console.error('Error enviando el mensaje de respuesta al cliente:', error);
-      });
-      if (response.status === LeadStatus.HOT) {
-        const messageToAgent: SendClientMessageDto = {
-          number: this.numberFormatting(nextAgent.number),
-          message: `🔥 ¡LEAD CALIENTE! El cliente ${clienteFormateado.name} (${clienteFormateado.number}) tiene un score de ${response.score}`
-
+          }
+          this.sendMessageToClient(messageToAgent)
         }
-        this.sendMessageToClient(messageToAgent)
-      }
-    }).catch((error) => {
-      console.error('Error enviando el mensaje a la IA:', error);
-    });
+      }).catch((error) => {
+        console.error('Error enviando el mensaje a la IA:', error);
+      });
+    }
   }
 
   async sendToAI(data: SaveClientMessagesDto) {

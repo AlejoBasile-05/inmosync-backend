@@ -41,6 +41,7 @@ model Client {
   number String @unique
   score Float
   status LeadStatus @default(COLD)
+  botActive Boolean    @default(true)
   messages Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
