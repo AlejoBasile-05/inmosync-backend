@@ -4,4 +4,5 @@ export class SaveClientMessagesDto {
     number: string;
     score?: number;
     messages: string;
+    businessNumber: string
 }

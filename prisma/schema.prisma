@@ -14,6 +14,27 @@ enum LeadStatus {
   COLD
 }
 
+model Company {
+  id String @id @default(uuid())
+  name String
+  metaPhoneNumber String?  @unique
+  createdAt DateTime @default(now())
+  agents Agent[]
+  properties Property[]
+}
+
+model Agent {
+  id String @id
+  companyId String
+  name String
+  number String @unique
+  email String @unique
+  lastLeadReceivedAt DateTime @default(now())
+  clients Client[]
+  createdAt DateTime @default(now())
+  company Company @relation(fields: [companyId], references:[id])
+}
+
 model Client {
   id Int @id @default(autoincrement())
   name String
@@ -23,6 +44,8 @@ model Client {
   messages Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  agentId String
+  agent Agent @relation(fields: [agentId], references:[id])
 }
 
 model Message {
@@ -37,12 +60,14 @@ model Message {
 
 model Property {
   id Int @id @default(autoincrement())
+  companyId String
   type String
   location String
   price Float
   currency String
   characteristics String[]
   reports Report[]
+  company Company @relation(fields: [companyId], references:[id])
 }
 
 model Report {

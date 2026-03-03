@@ -6,6 +6,9 @@ import { firstValueFrom } from 'rxjs';
 import { Send } from 'express';
 import { SendClientMessageDto } from './dto/sendClientMessage.dto';
 import { LeadStatus } from '@prisma/client';
+import { InternalServerErrorException } from '@nestjs/common';
+import { WebhookGateway } from './webhook.gateway';
+import { MessageGatewayDto } from './dto/messageGateway.dto';
 
 interface IAResponse {
   score: number;
@@ -18,6 +21,7 @@ export class WebhookService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
+    private readonly webhookGateway: WebhookGateway
   ) {}
 
   verifyMetaToken(mode: string, token: string): boolean {
@@ -28,30 +32,72 @@ export class WebhookService {
   }
 
   async saveClientMessage(data: SaveClientMessagesDto) {
-    const nameClient = data.name;
-    const numberClient = data.number.toString();
-    const textMessage = data.messages;
+    const { name, number, messages, businessNumber } = data;
+
+    const company = await this.prisma.company.findFirst({
+      where: { 
+      metaPhoneNumber: businessNumber
+      },
+      include: { agents: true }
+    });
+
+    if (!company) {
+      console.error(`No existe agente configurado para el número: ${businessNumber}`);
+      return;
+    }
+
+    const nextAgent = await this.prisma.agent.findFirst({
+      where: { companyId: company.id },
+      orderBy: { lastLeadReceivedAt: 'asc' } 
+    });
+
+    if (!nextAgent) {
+      console.error(`Error: La empresa ${company.name} no tiene agentes.`);
+      return;
+    }
 
     const cliente = await this.prisma.client.upsert({
-      where: { number: numberClient },
+      where: { number: this.numberFormatting(number) },
       update: { messages: {
-        create: { text: textMessage, origin: 'whatsapp', number: numberClient}
+        create: { text: messages, origin: 'whatsapp', number: number}
       } },
-      create: { name: nameClient, number: numberClient, score: 0, messages: {
-        create: { text: textMessage, origin: 'whatsapp', number: numberClient }
+      create: { name: name,
+                number: this.numberFormatting(number),
+                score: 0,
+                agent: { connect: { id: nextAgent.id } },
+                messages: {
+                  create: { text: messages, origin: 'whatsapp', number: this.numberFormatting(number) }
       } },
     });
+
+    const incomingMessagePayload : MessageGatewayDto = {
+      id: `msg-${Date.now()}`, // id temporal para el mensaje entrante
+      clientId: cliente.id.toString(),
+      text: messages,
+      origin: 'whatsapp',
+      time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    this.webhookGateway.emitNewMessage(cliente.id.toString(), incomingMessagePayload);
+
+    if (cliente.createdAt.getTime() === cliente.updatedAt.getTime()) {
+      await this.prisma.agent.update({
+        where: { id: nextAgent.id },
+        data: { lastLeadReceivedAt: new Date() }
+    });
+}
 
     const clienteFormateado: SaveClientMessagesDto = {
       name: cliente.name,
       number: cliente.number,
       score: cliente.score,
-      messages: textMessage
+      messages: messages,
+      businessNumber: businessNumber
     };
 
-    this.sendToAI(clienteFormateado).then((response) => {
+    this.sendToAI(clienteFormateado).then(async (response) => {
       const score = response.score || 0;
-      this.prisma.client.update({
+      await this.prisma.client.update({
         where: { id: cliente.id },
         data: { score: score, status: response.status, messages: {
           create: { text: response.message, origin: 'FastAPI', number: cliente.number }
@@ -59,6 +105,17 @@ export class WebhookService {
       }).catch((error) => {
         console.error('Error actualizando el score en la BD:', error);
       });
+
+      const incomingMessagePayload: MessageGatewayDto = {
+        id: `msg-${Date.now()}`,
+        clientId: cliente.id.toString(),
+        text: response.message,
+        origin: 'agent',
+        time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      this.webhookGateway.emitNewMessage(cliente.id.toString(), incomingMessagePayload);
+
       const messageCliente: SendClientMessageDto = {
         number: this.numberFormatting(cliente.number),
         message: response.message,
@@ -68,7 +125,7 @@ export class WebhookService {
       });
       if (response.status === LeadStatus.HOT) {
         const messageToAgent: SendClientMessageDto = {
-          number: process.env.AGENT_PHONE_NUMBER || "542625635902",
+          number: this.numberFormatting(nextAgent.number),
           message: `🔥 ¡LEAD CALIENTE! El cliente ${clienteFormateado.name} (${clienteFormateado.number}) tiene un score de ${response.score}`
 
         }
@@ -80,6 +137,7 @@ export class WebhookService {
   }
 
   async sendToAI(data: SaveClientMessagesDto) {
+    /*
     const iaUrl = process.env.IA_SERVICE_URL || 'http://localhost:8000/chat';
 
     const payload = {
@@ -93,6 +151,12 @@ export class WebhookService {
     );
 
     return response.data;
+    */
+    return {
+      score: 90, 
+      message: 'Este es un mensaje generado por la IA basado en el mensaje del cliente.',
+      status: LeadStatus.HOT
+    }
   }
 
   async sendMessageToClient(data : SendClientMessageDto) {
@@ -100,7 +164,7 @@ export class WebhookService {
 
     const payload = {
       messaging_product: 'whatsapp',
-      to: data.number.toString(),
+      to: (data.number.toString()),
       type: 'text',
       text: { body: data.message },
     };
@@ -116,6 +180,7 @@ export class WebhookService {
       );
     } catch (error) {
       console.error('Error enviando mensaje:', error.response?.data || error.message);
+      throw new InternalServerErrorException('No se pudo enviar el mensaje a WhatsApp')
     }
   }
 

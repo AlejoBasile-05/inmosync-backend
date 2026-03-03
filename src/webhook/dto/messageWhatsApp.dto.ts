@@ -13,6 +13,9 @@ export class messageWhatsAppDto {
                         name: string;
                     };
                 }[];
+                metadata: {
+                    display_phone_number: string;
+                }
             };
         }[];
     }[];

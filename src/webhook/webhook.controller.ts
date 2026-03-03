@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Query, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Res, HttpStatus, UseGuards } from '@nestjs/common';
 import { WebhookService } from './webhook.service';
 import type { Response } from 'express';
 import { messageWhatsAppDto } from './dto/messageWhatsApp.dto';
 import { SaveClientMessagesDto } from './dto/saveClientMessages.dto';
 
+@UseGuards()
 @Controller('webhook')
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
@@ -31,7 +32,8 @@ export class WebhookController {
       const data: SaveClientMessagesDto = {
         name: body.entry[0].changes[0].value.contacts[0].profile.name,
         number: body.entry[0].changes[0].value.messages[0].from,
-        messages: body.entry[0].changes[0].value.messages[0].text.body
+        messages: body.entry[0].changes[0].value.messages[0].text.body,
+        businessNumber: body.entry[0].changes[0].value.metadata.display_phone_number
       };
       this.webhookService.saveClientMessage(data).catch((error) => {
         console.error('Error guardando el mensaje en la BD:', error);
