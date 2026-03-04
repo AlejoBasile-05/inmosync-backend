@@ -27,11 +27,14 @@ export class AgentsService {
             status: true,
             messages: {
               select: {
+                id: true, 
+                clientId: true,
                 text: true,
                 origin: true,
                 createdAt: true
               },
-              orderBy: { createdAt: 'asc' }
+              orderBy: { createdAt: 'desc' },
+              take: 1
             }
           },
           orderBy: {
@@ -94,6 +97,28 @@ export class AgentsService {
       message: 'Bot reactivado exitosamente', 
       botActive: updatedClient.botActive 
     };
+  }
+
+  async clientHistory(clientId: number, agentId: string) {
+    const client = await this.prisma.client.findFirst({
+      where: { id: clientId, agentId: agentId },
+    })
+
+    if (!client) {
+      throw new NotFoundException('El cliente no pertenece a este agente')
+    }
+
+    return await this.prisma.message.findMany({
+      where: { clientId: clientId },
+      select: {
+        id: true,
+        clientId: true,
+        text: true,
+        origin: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'asc' }
+    })
   }
 
 }

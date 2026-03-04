@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Post, Body, Patch } from '@nestjs/common';
+import { Controller, Get, UseGuards, Post, Body, Patch, Param } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/common/decorators/GetUser';
 import { AgentsService } from './agents.service';
@@ -14,6 +14,14 @@ export class AgentsController {
 
     return await this.agentsService.findForID(agentId)
   
+  }
+
+  @Get('perfil/clientes/:clientId/historial')
+  async getHistory(
+    @GetUser('id') agentId: string,
+    @Param('clientId') clientId: number
+  ) {
+    return await this.agentsService.clientHistory(Number(clientId), agentId);
   }
 
   @Post('mensajes')
