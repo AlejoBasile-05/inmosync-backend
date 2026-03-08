@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class PropertiesService {
@@ -51,10 +52,19 @@ export class PropertiesService {
     })
   }
 
-  async findAll(status: "FREE" | "BUSY") {
+  async findAll(agentId: string) {
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+      select: { companyId: true }
+    });
+
+    if (!agent) {
+      throw new NotFoundException('Agent not found');
+    }
+
     return await this.prisma.property.findMany({
-      where: {
-        status: status
+      where: { 
+        companyId: agent.companyId 
       }
     });
   }
