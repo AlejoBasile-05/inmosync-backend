@@ -32,6 +32,8 @@
     "@nestjs/websockets": "^11.1.14",
     "@prisma/adapter-pg": "^7.4.1",
     "@prisma/client": "^7.4.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
     "express": "^5.2.1",
     "jwks-rsa": "^3.2.2",
     "passport": "^0.7.0",

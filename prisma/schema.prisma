@@ -14,6 +14,16 @@ enum LeadStatus {
   COLD
 }
 
+enum Role {
+  ADMIN
+  AGENT
+}
+
+enum PropertyStatus {
+  BUSY
+  FREE
+}
+
 model Company {
   id String @id @default(uuid())
   name String
@@ -29,6 +39,7 @@ model Agent {
   name String
   number String @unique
   email String @unique
+  role Role @default(AGENT)
   lastLeadReceivedAt DateTime @default(now())
   clients Client[]
   createdAt DateTime @default(now())
@@ -62,11 +73,17 @@ model Message {
 model Property {
   id Int @id @default(autoincrement())
   companyId String
+  title String
+  status PropertyStatus @default(FREE)
   type String
   location String
+  beds Int
+  baths Int
+  sqft Int
   price Float
   currency String
   characteristics String[]
+  mainImageUrl String
   reports Report[]
   company Company @relation(fields: [companyId], references:[id])
 }
